@@ -4,8 +4,10 @@ import '../models/task.dart';
 import '../models/time_slot.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/api_config.dart';
+
 class ApiService {
-  final String baseUrl = 'http://localhost:5000/api'; // Vercel URL later
+  String get baseUrl => ApiConfig.baseUrl;
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
