@@ -16,11 +16,14 @@ class ProductivityProvider with ChangeNotifier {
 
   // Analytics
   Map<String, dynamic> _categoryBreakdown = {};
+  Map<String, dynamic> _taskBreakdown = {};
+  Map<String, dynamic> _productivityByCategory = {};
   String _aiInsights = '';
   double _productivityPercentage = 0;
   int _totalMinutes = 0;
   int _productiveMinutes = 0;
   int _wastedMinutes = 0;
+  int _neutralMinutes = 0;
 
   List<Task> get tasks => _tasks;
   List<TimeSlot> get slots => _slots;
@@ -28,11 +31,14 @@ class ProductivityProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   Map<String, dynamic> get categoryBreakdown => _categoryBreakdown;
+  Map<String, dynamic> get taskBreakdown => _taskBreakdown;
+  Map<String, dynamic> get productivityByCategory => _productivityByCategory;
   String get aiInsights => _aiInsights;
   double get productivityPercentage => _productivityPercentage;
   int get totalMinutes => _totalMinutes;
   int get productiveMinutes => _productiveMinutes;
   int get wastedMinutes => _wastedMinutes;
+  int get neutralMinutes => _neutralMinutes;
 
   Future<void> loadDailyData(DateTime date) async {
     _isLoading = true;
@@ -52,19 +58,18 @@ class ProductivityProvider with ChangeNotifier {
       // Load analytics
       try {
         final analytics = await _apiService.getAnalytics('day', date: date);
-        _totalMinutes = (analytics['totalMinutes'] ?? 0) is int
-            ? analytics['totalMinutes']
-            : int.tryParse(analytics['totalMinutes'].toString()) ?? 0;
-        _productiveMinutes = (analytics['productiveMinutes'] ?? 0) is int
-            ? analytics['productiveMinutes']
-            : int.tryParse(analytics['productiveMinutes'].toString()) ?? 0;
-        _wastedMinutes = (analytics['wastedMinutes'] ?? 0) is int
-            ? analytics['wastedMinutes']
-            : int.tryParse(analytics['wastedMinutes'].toString()) ?? 0;
+        _totalMinutes = _parseIntSafe(analytics['totalMinutes']);
+        _productiveMinutes = _parseIntSafe(analytics['productiveMinutes']);
+        _wastedMinutes = _parseIntSafe(analytics['wastedMinutes']);
+        _neutralMinutes = _parseIntSafe(analytics['neutralMinutes']);
         _productivityPercentage = double.tryParse(
             analytics['productivityPercentage']?.toString() ?? '0') ?? 0;
         _categoryBreakdown = Map<String, dynamic>.from(
             analytics['categoryBreakdown'] ?? {});
+        _taskBreakdown = Map<String, dynamic>.from(
+            analytics['taskBreakdown'] ?? {});
+        _productivityByCategory = Map<String, dynamic>.from(
+            analytics['productivityByCategory'] ?? {});
         _aiInsights = analytics['insights']?.toString() ?? '';
       } catch (e) {
         debugPrint('Analytics fetch failed: $e');
@@ -76,6 +81,12 @@ class ProductivityProvider with ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  int _parseIntSafe(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    return int.tryParse(value.toString()) ?? 0;
   }
 
   Future<void> addTask(String name, DateTime date) async {
@@ -113,13 +124,47 @@ class ProductivityProvider with ChangeNotifier {
 
   Future<void> addTimeSlot(TimeSlot slot) async {
     try {
-      await _apiService.createSlot(slot);
-      _slots.add(slot);
+      final created = await _apiService.createSlot(slot);
+      // Remove existing if same timeRange (upsert case)
+      _slots.removeWhere((s) => s.timeRange == slot.timeRange);
+      _slots.add(created);
       notifyListeners();
-      // Refresh analytics after adding a slot
+      // Refresh analytics
       loadDailyData(DateTime.now());
     } catch (e) {
       debugPrint('Failed to create time slot: $e');
+    }
+  }
+
+  Future<void> updateTimeSlot(String id, {String? taskSelected, String? category, String? productivityType}) async {
+    try {
+      final updated = await _apiService.updateSlot(id,
+          taskSelected: taskSelected,
+          category: category,
+          productivityType: productivityType);
+      final index = _slots.indexWhere((s) => s.id == id);
+      if (index >= 0) {
+        _slots[index] = updated;
+      }
+      notifyListeners();
+      loadDailyData(DateTime.now());
+    } catch (e) {
+      debugPrint('Failed to update time slot: $e');
+    }
+  }
+
+  Future<void> deleteTimeSlot(String id) async {
+    final oldSlots = List<TimeSlot>.from(_slots);
+    _slots.removeWhere((s) => s.id == id);
+    notifyListeners();
+
+    try {
+      await _apiService.deleteSlot(id);
+      loadDailyData(DateTime.now());
+    } catch (e) {
+      _slots = oldSlots;
+      notifyListeners();
+      debugPrint('Failed to delete time slot: $e');
     }
   }
 
@@ -155,11 +200,14 @@ class ProductivityProvider with ChangeNotifier {
     _tasks = [];
     _slots = [];
     _categoryBreakdown = {};
+    _taskBreakdown = {};
+    _productivityByCategory = {};
     _aiInsights = '';
     _productivityPercentage = 0;
     _totalMinutes = 0;
     _productiveMinutes = 0;
     _wastedMinutes = 0;
+    _neutralMinutes = 0;
     _error = null;
     notifyListeners();
   }

@@ -152,14 +152,42 @@ class ApiService {
     throw Exception('Failed to load slots');
   }
 
-  Future<void> createSlot(TimeSlot slot) async {
+  Future<TimeSlot> createSlot(TimeSlot slot) async {
     final res = await http.post(
       Uri.parse('$baseUrl/slots'),
       headers: await _getHeaders(),
       body: jsonEncode(slot.toJson()),
     );
-    if (res.statusCode != 201) {
-      throw Exception('Failed to create time slot');
+    if (res.statusCode == 201 || res.statusCode == 200) {
+      return TimeSlot.fromJson(jsonDecode(res.body));
+    }
+    throw Exception('Failed to create time slot');
+  }
+
+  Future<TimeSlot> updateSlot(String id, {String? taskSelected, String? category, String? productivityType}) async {
+    final body = <String, dynamic>{};
+    if (taskSelected != null) body['taskSelected'] = taskSelected;
+    if (category != null) body['category'] = category;
+    if (productivityType != null) body['productivityType'] = productivityType;
+
+    final res = await http.put(
+      Uri.parse('$baseUrl/slots/$id'),
+      headers: await _getHeaders(),
+      body: jsonEncode(body),
+    );
+    if (res.statusCode == 200) {
+      return TimeSlot.fromJson(jsonDecode(res.body));
+    }
+    throw Exception('Failed to update time slot');
+  }
+
+  Future<void> deleteSlot(String id) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/slots/$id'),
+      headers: await _getHeaders(),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Failed to delete time slot');
     }
   }
 

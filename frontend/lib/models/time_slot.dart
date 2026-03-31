@@ -31,12 +31,14 @@ class TimeSlot {
   }
 
   Map<String, dynamic> toJson() {
+    final typeName = type.toString().split('.').last;
+    final capitalizedType = typeName[0].toUpperCase() + typeName.substring(1);
     return {
       'date': date,
       'timeRange': timeRange,
       'taskSelected': taskSelected,
       'category': category,
-      'productivityType': type.toString().split('.').last,
+      'productivityType': capitalizedType,
     };
   }
 }

@@ -344,10 +344,23 @@ class _TimelineScreenState extends State<TimelineScreen> {
   }
 
   void _showQuickEntrySheet(BuildContext context, String timeRange) {
-    final categories = context.read<ProductivityProvider>().categories;
-    String selectedCategory =
-        categories.isNotEmpty ? categories.first : 'Other';
-    ProductivityType selectedType = ProductivityType.productive;
+    final provider = context.read<ProductivityProvider>();
+    final categories = provider.categories;
+
+    // Check if slot already exists for this timeRange
+    final existingSlot = provider.slots
+        .where((s) => s.timeRange == timeRange)
+        .isNotEmpty
+        ? provider.slots.firstWhere((s) => s.timeRange == timeRange)
+        : null;
+
+    // Pre-fill with existing data or defaults
+    String selectedCategory = existingSlot != null
+        ? existingSlot.category
+        : (categories.isNotEmpty ? categories.first : 'Other');
+    ProductivityType selectedType =
+        existingSlot?.type ?? ProductivityType.productive;
+    final bool isEditing = existingSlot != null;
 
     showModalBottomSheet(
       context: context,
@@ -380,22 +393,63 @@ class _TimelineScreenState extends State<TimelineScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient,
+                      gradient: isEditing
+                          ? AppColors.warmGradient
+                          : AppColors.primaryGradient,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.schedule_rounded,
-                        color: Colors.white, size: 18),
+                    child: Icon(
+                        isEditing
+                            ? Icons.edit_rounded
+                            : Icons.schedule_rounded,
+                        color: Colors.white,
+                        size: 18),
                   ),
                   const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Log $timeRange', style: AppTextStyles.h3),
-                      Text('Quick entry • 20 min block',
-                          style:
-                              AppTextStyles.caption.copyWith(fontSize: 12)),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                            isEditing
+                                ? 'Edit $timeRange'
+                                : 'Log $timeRange',
+                            style: AppTextStyles.h3),
+                        Text(
+                            isEditing
+                                ? 'Update or delete this entry'
+                                : 'Quick entry • 20 min block',
+                            style: AppTextStyles.caption
+                                .copyWith(fontSize: 12)),
+                      ],
+                    ),
                   ),
+                  // Delete button for existing slots
+                  if (isEditing)
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        provider.deleteTimeSlot(existingSlot!.id!);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('$timeRange entry deleted'),
+                            backgroundColor: AppColors.softPink,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.softPink.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.delete_outline_rounded,
+                            color: AppColors.softPink, size: 20),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -439,7 +493,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              Text('CATEGORY',
+              Text('CATEGORY / TASK',
                   style: AppTextStyles.label.copyWith(letterSpacing: 1)),
               const SizedBox(height: 12),
               Wrap(
@@ -487,20 +541,31 @@ class _TimelineScreenState extends State<TimelineScreen> {
               ),
               const SizedBox(height: 28),
               GradientButton(
-                text: 'Save Time Block',
+                text: isEditing ? 'Update Time Block' : 'Save Time Block',
                 onPressed: () {
-                  context.read<ProductivityProvider>().addTimeSlot(TimeSlot(
-                        date: DateTime.now().toIso8601String(),
-                        timeRange: timeRange,
-                        taskSelected: selectedCategory,
-                        category: selectedCategory,
-                        type: selectedType,
-                      ));
+                  if (isEditing && existingSlot!.id != null) {
+                    final typeName = selectedType.name;
+                    final capitalizedType = typeName[0].toUpperCase() + typeName.substring(1);
+                    provider.updateTimeSlot(
+                      existingSlot!.id!,
+                      taskSelected: selectedCategory,
+                      category: selectedCategory,
+                      productivityType: capitalizedType,
+                    );
+                  } else {
+                    provider.addTimeSlot(TimeSlot(
+                      date: DateTime.now().toIso8601String(),
+                      timeRange: timeRange,
+                      taskSelected: selectedCategory,
+                      category: selectedCategory,
+                      type: selectedType,
+                    ));
+                  }
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                          '$timeRange logged as ${selectedType.name}'),
+                          '$timeRange ${isEditing ? "updated" : "logged"} as ${selectedType.name}'),
                       backgroundColor: AppColors.primaryGreen,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
@@ -517,3 +582,4 @@ class _TimelineScreenState extends State<TimelineScreen> {
     );
   }
 }
+
