@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:flutter/foundation.dart';
 import '../models/task.dart';
 import '../models/time_slot.dart';
 
@@ -12,8 +13,10 @@ class LocalDbService {
 
   Future<Database> get database async {
     if (_db != null) return _db!;
-    _db = await _initDb();
-    return _db!;
+    if (!kIsWeb) {
+      _db = await _initDb();
+    }
+    return _db ?? throw Exception('Web mock');
   }
 
   Future<Database> _initDb() async {
@@ -48,6 +51,7 @@ class LocalDbService {
   }
 
   Future<void> saveTask(Task task) async {
+    if (kIsWeb) return;
     final db = await database;
     await db.insert('tasks', {
       'id': task.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
@@ -58,6 +62,7 @@ class LocalDbService {
   }
 
   Future<List<Task>> getPendingLocalTasks() async {
+    if (kIsWeb) return [];
     final db = await database;
     final res = await db.query('tasks', where: 'isCompleted = ?', whereArgs: [0]);
     return res.map((m) => Task(
@@ -69,6 +74,7 @@ class LocalDbService {
   }
 
   Future<void> saveTimeSlot(TimeSlot slot) async {
+    if (kIsWeb) return;
     final db = await database;
     await db.insert('time_slots', {
       'id': slot.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
@@ -81,6 +87,7 @@ class LocalDbService {
   }
 
   Future<List<TimeSlot>> getLocalTimeSlots() async {
+    if (kIsWeb) return [];
     final db = await database;
     final res = await db.query('time_slots');
     return res.map((m) => TimeSlot(

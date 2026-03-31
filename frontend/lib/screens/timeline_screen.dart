@@ -20,7 +20,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
         String from = DateFormat('HH:mm').format(start);
         start = start.add(const Duration(minutes: 20));
         String to = DateFormat('HH:mm').format(start);
-        blocks.add('\$from-\$to');
+        blocks.add('$from-$to');
     }
     return blocks;
   }
@@ -58,7 +58,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
       context: context, 
       builder: (ctx) {
          return AlertDialog(
-            title: Text('Log \$timeRange'),
+            title: Text('Log $timeRange'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

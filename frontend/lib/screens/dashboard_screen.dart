@@ -41,7 +41,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               Text(
-                'Today\\'s Productivity: ${prodPercent.toStringAsFixed(1)}%',
+                'Today\'s Productivity: ${prodPercent.toStringAsFixed(1)}%',
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
