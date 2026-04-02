@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import TimeSlot, { ProductivityType } from '../models/TimeSlot';
 import Task from '../models/Task';
 import { generateDailyInsights } from '../services/groqService';
+import { getCache, setCache } from '../services/redisService';
 
 const getDateRange = (dateStr: string, period: string) => {
   const queryDate = new Date(dateStr);
@@ -49,6 +50,13 @@ export const getAnalytics = async (req: Request, res: Response) => {
       (date as string) || new Date().toISOString(),
       period
     );
+    
+    // Cache Key format: user:{userId}:analytics:{period}:{startDate}
+    const dateKey = start.toISOString().split('T')[0];
+    const cacheKey = `user:${user._id}:analytics:${period}:${dateKey}`;
+    
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) return res.json(cachedData);
 
     const slots = await TimeSlot.find({
       userId: user._id,
@@ -138,7 +146,7 @@ export const getAnalytics = async (req: Request, res: Response) => {
       console.error('Groq insights error:', e);
     }
 
-    res.json({
+    const responseData = {
       totalMinutes,
       productiveMinutes,
       wastedMinutes,
@@ -151,7 +159,10 @@ export const getAnalytics = async (req: Request, res: Response) => {
       totalTasks: tasks.length,
       completedTasks,
       insights,
-    });
+    };
+
+    await setCache(cacheKey, responseData, 3600); // Cache for 1 hour
+    res.json(responseData);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
   }
@@ -170,6 +181,12 @@ export const getWeeklyTrend = async (req: Request, res: Response) => {
     const start = new Date(baseDate);
     start.setDate(start.getDate() - 6);
     start.setHours(0, 0, 0, 0);
+
+    const dateKey = end.toISOString().split('T')[0];
+    const cacheKey = `user:${user._id}:weekly-trend:${dateKey}`;
+
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) return res.json(cachedData);
 
     const slots = await TimeSlot.find({
       userId: user._id,
@@ -240,7 +257,10 @@ export const getWeeklyTrend = async (req: Request, res: Response) => {
       return { date: day.date, cumulativeMinutes: cumulative };
     });
 
-    res.json({ trend, cumulativeFocus });
+    const responseData = { trend, cumulativeFocus };
+    await setCache(cacheKey, responseData, 3600); // Cache for 1 hour
+    
+    res.json(responseData);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
   }
@@ -255,6 +275,10 @@ export const getHeatmapData = async (req: Request, res: Response) => {
   try {
     const m = parseInt(month as string) || new Date().getMonth() + 1;
     const y = parseInt(year as string) || new Date().getFullYear();
+
+    const cacheKey = `user:${user._id}:heatmap:${y}-${m.toString().padStart(2, '0')}`;
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) return res.json(cachedData);
 
     const start = new Date(y, m - 1, 1);
     start.setHours(0, 0, 0, 0);
@@ -295,7 +319,7 @@ export const getHeatmapData = async (req: Request, res: Response) => {
 
     const maxMinutes = Math.max(...Object.values(dayMap), 1);
 
-    res.json({
+    const responseData = {
       month: m,
       year: y,
       daysInMonth,
@@ -303,7 +327,10 @@ export const getHeatmapData = async (req: Request, res: Response) => {
       maxMinutes,
       hourlyMap,
       firstDayOfWeek: new Date(y, m - 1, 1).getDay(), // 0=Sun
-    });
+    };
+
+    await setCache(cacheKey, responseData, 3600); // Cache for 1 hour
+    res.json(responseData);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
   }

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import TimeSlot from '../models/TimeSlot';
+import { getCache, setCache, invalidateUserAnalytics, deleteCacheKeys } from '../services/redisService';
 
 // @desc    Create a new time slot
 // @route   POST /api/slots
@@ -28,6 +29,11 @@ export const createTimeSlot = async (req: Request, res: Response) => {
       existing.productivityType = productivityType;
       existing.date = new Date(date);
       await existing.save();
+
+      const dateKey = queryDate.toISOString().split('T')[0];
+      await deleteCacheKeys([`user:${user._id}:slots:${dateKey}`]);
+      await invalidateUserAnalytics(user._id.toString());
+
       return res.status(200).json(existing);
     }
 
@@ -39,6 +45,10 @@ export const createTimeSlot = async (req: Request, res: Response) => {
       category,
       productivityType,
     });
+
+    const dateKey = queryDate.toISOString().split('T')[0];
+    await deleteCacheKeys([`user:${user._id}:slots:${dateKey}`]);
+    await invalidateUserAnalytics(user._id.toString());
 
     res.status(201).json(slot);
   } catch (error: any) {
@@ -54,6 +64,12 @@ export const getTimeSlots = async (req: Request, res: Response) => {
 
   try {
     const queryDate = new Date(date as string);
+    const dateKey = queryDate.toISOString().split('T')[0];
+    const cacheKey = `user:${user._id}:slots:${dateKey}`;
+
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) return res.json(cachedData);
+
     const startOfDay = new Date(queryDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(queryDate);
@@ -64,6 +80,7 @@ export const getTimeSlots = async (req: Request, res: Response) => {
       date: { $gte: startOfDay, $lte: endOfDay }
     }).sort({ timeRange: 1 });
 
+    await setCache(cacheKey, slots, 3600);
     res.json(slots);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
@@ -88,6 +105,11 @@ export const updateTimeSlot = async (req: Request, res: Response) => {
     if (productivityType !== undefined) slot.productivityType = productivityType;
 
     await slot.save();
+
+    const dateKey = new Date(slot.date).toISOString().split('T')[0];
+    await deleteCacheKeys([`user:${user._id}:slots:${dateKey}`]);
+    await invalidateUserAnalytics(user._id.toString());
+
     res.json(slot);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
@@ -105,6 +127,11 @@ export const deleteTimeSlot = async (req: Request, res: Response) => {
     if (!slot) {
       return res.status(404).json({ message: 'Time slot not found' });
     }
+
+    const dateKey = new Date(slot.date).toISOString().split('T')[0];
+    await deleteCacheKeys([`user:${user._id}:slots:${dateKey}`]);
+    await invalidateUserAnalytics(user._id.toString());
+
     res.json({ message: 'Time slot deleted' });
   } catch (error: any) {
     res.status(400).json({ message: error.message });

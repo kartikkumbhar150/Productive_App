@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import TimeSlot, { ProductivityType } from '../models/TimeSlot';
 import Task from '../models/Task';
+import { getCache, setCache } from '../services/redisService';
 
 // @desc    Get report for a custom date range
 // @route   GET /api/reports?startDate=...&endDate=...
@@ -25,6 +26,13 @@ export const getReport = async (req: Request, res: Response) => {
     if (start > end) {
       return res.status(400).json({ message: 'startDate must be before endDate' });
     }
+
+    const dateKeyStart = start.toISOString().split('T')[0];
+    const dateKeyEnd = end.toISOString().split('T')[0];
+    const cacheKey = `user:${user._id}:reports:${dateKeyStart}-${dateKeyEnd}`;
+
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) return res.json(cachedData);
 
     const slots = await TimeSlot.find({
       userId: user._id,
@@ -200,7 +208,7 @@ export const getReport = async (req: Request, res: Response) => {
     const consistency = totalDays > 0 ? Math.min(daysTracked / totalDays, 1) : 0;
     const productivityIndex = Math.round((taskRate * 40) + (timeUtil * 30) + (consistency * 30));
 
-    res.json({
+    const responseData = {
       startDate: start.toISOString(),
       endDate: end.toISOString(),
       totalDays,
@@ -218,7 +226,11 @@ export const getReport = async (req: Request, res: Response) => {
       dailyBreakdown,
       hourlyProductivity,
       weekdayBreakdown,
-    });
+    };
+
+
+    await setCache(cacheKey, responseData, 3600); // 1 hour
+    res.json(responseData);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
   }

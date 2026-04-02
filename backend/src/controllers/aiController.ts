@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { getCache, setCache } from '../services/redisService';
 import TimeSlot, { ProductivityType } from '../models/TimeSlot';
 import Task from '../models/Task';
 
@@ -8,6 +9,10 @@ export const getAIInsights = async (req: Request, res: Response) => {
   const user = (req as any).user;
 
   try {
+    const cacheKey = `user:${user._id}:ai-insights`;
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) return res.json(cachedData);
+
     const end = new Date();
     end.setHours(23, 59, 59, 999);
     const start = new Date();
@@ -157,7 +162,7 @@ export const getAIInsights = async (req: Request, res: Response) => {
 
     const summary = `This week: ${productivityRate}% productive across ${totalSlots} time blocks. ${completedTasks}/${tasks.length} tasks completed.`;
 
-    res.json({
+    const payload = {
       insights: insights.slice(0, 5), // Max 5 insights
       bestHours,
       worstHours,
@@ -172,7 +177,10 @@ export const getAIInsights = async (req: Request, res: Response) => {
         daysTracked,
         avgSlotsPerDay,
       },
-    });
+    };
+
+    await setCache(cacheKey, payload, 3600);
+    res.json(payload);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
   }
