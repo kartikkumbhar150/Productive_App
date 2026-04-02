@@ -1,487 +1,226 @@
 # Clario — TrackYourTime
 
-A full-stack productivity tracking app built around **20-minute time blocks**, with task planning, category management, productivity analytics, and AI-generated coaching feedback.
+A full-stack productivity tracking app built around **20-minute time blocks**, with task planning, category management, comprehensive productivity analytics, full offline-first synchronization, and AI-generated coaching feedback.
 
 This repository contains:
-- A **Flutter frontend** (mobile + web capable)
-- A **Node.js/Express + TypeScript backend** with MongoDB
+- A **Flutter frontend** (Mobile + Web capable) with robust offline local storage and background sync.
+- A **Node.js/Express + TypeScript backend** with MongoDB, high-speed Redis caching, and Groq-powered AI insights.
 
 ---
 
-## Table of Contents
+## 📖 Table of Contents
 
-1. [What this project does](#what-this-project-does)
-2. [Core product philosophy](#core-product-philosophy)
-3. [Repository structure](#repository-structure)
-4. [Tech stack](#tech-stack)
-5. [Feature walkthrough](#feature-walkthrough)
-6. [How data is modeled](#how-data-is-modeled)
-7. [API reference](#api-reference)
-8. [Local development setup](#local-development-setup)
-9. [Frontend setup (Flutter)](#frontend-setup-flutter)
-10. [Backend setup (Express + MongoDB)](#backend-setup-express--mongodb)
-11. [Environment variables](#environment-variables)
-12. [Running the app end-to-end](#running-the-app-end-to-end)
-13. [Analytics and AI insights details](#analytics-and-ai-insights-details)
-14. [Cron job behavior](#cron-job-behavior)
-15. [Deployment notes](#deployment-notes)
-16. [Security and auth notes](#security-and-auth-notes)
-17. [Known limitations / implementation notes](#known-limitations--implementation-notes)
-18. [Troubleshooting](#troubleshooting)
-19. [Suggested roadmap](#suggested-roadmap)
-20. [License](#license)
+1. [Features & Improvements](#features--improvements)
+2. [Tech Stack](#tech-stack)
+3. [Architecture & Data Models](#architecture--data-models)
+4. [API Reference (Detailed)](#api-reference-detailed)
+5. [Local Development Setup](#local-development-setup)
+6. [Environment Variables](#environment-variables)
+7. [Deployment & Production Config](#deployment--production-config)
+8. [Known Limitations & Troubleshooting](#known-limitations--troubleshooting)
+9. [Roadmap](#roadmap)
 
 ---
 
-## What this project does
+## ✨ Features & Improvements
 
-Clario helps users create structure in their day through:
+### 1) Authentication & User Management
+- **Secure Access**: Email/password registration and login secured with JWT and bcrypt password hashing.
+- **Profile Customization**: Users can update names and profile photo references.
+- **Custom Categories**: Users can manage custom time categories (e.g., Study, Work, Exercise, Leisure).
 
-- **Immutable daily tasks** (create + complete)
-- **20-minute time slot tracking** with productivity labels:
-  - `Productive`
-  - `Neutral`
-  - `Wasted`
-- **Per-category and per-task analytics**
-- **AI-generated coaching insights** based on tracked behavior
-- **Customizable user categories**
-- **Basic profile management** (name + profile photo string)
+### 2) Core Philosophy: 20-Minute Time Slot Tracking
+- **Granular Accountability**: The day is represented as a series of deliberate 20-minute blocks.
+- **Productivity Labels**: Time is tagged as `Productive`, `Neutral`, or `Wasted`.
+- **Full CRUD for Slots**: Users can seamlessly create, update, and delete logged time slots dynamically.
 
-The backend exposes REST APIs consumed by the Flutter client.
+### 3) Immutable Task Planning
+- **Daily Tasks**: Create tasks mapped strictly to dates.
+- **Task Progression**: Mark tasks as completed with non-blocking UI updates ensuring high responsiveness.
+- **Constrained Editing**: Task renaming is intentionally constrained to encourage commitment, though flexible deletions and insertions are supported.
 
----
+### 4) Comprehensive Analytics Engine
+- **Period Agnostic Views**: Easily fetch `day` or `week` reporting summaries.
+- **Metrics Calculated**:
+  - Total minutes / Productive minutes / Wasted minutes.
+  - Overall Productivity Percentage.
+  - Deep category and task breakdown distributions.
+- **Weekly Trends & Heatmaps**: Visualize productivity flow across the broader week using dense Heatmap capabilities.
 
-## Core product philosophy
+### 5) 🤖 AI-Generated Coaching Insights
+- Integrated securely with the **Groq SDK**. The backend packages a compact analytical payload of daily behaviors and queries an LLM pipeline to return actionable coaching feedback. It elegantly falls back to localized strings if the API limit is reached.
 
-The project uses **behavioral accountability by granularity**:
-
-- Day is represented as a series of short, deliberate blocks.
-- Tracking happens at a small unit (20 minutes), reducing “I’ll do it later” ambiguity.
-- Analytics are generated from **actual logged slots** instead of estimated completion claims.
-- Task editing is intentionally constrained to encourage commitment and reduce over-optimization.
-
----
-
-## Repository structure
-
-```text
-Clario_TrackYourTime/
-├── backend/
-│   ├── src/
-│   │   ├── config/            # DB connection
-│   │   ├── controllers/       # Route handlers
-│   │   ├── middleware/        # Auth middleware
-│   │   ├── models/            # Mongoose models
-│   │   ├── routes/            # Express route definitions
-│   │   └── services/          # Groq + cron logic
-│   ├── deployment_guide.md
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── vercel.json
-└── frontend/
-    ├── lib/
-    │   ├── core/              # Theme + API config
-    │   ├── models/            # App models
-    │   ├── providers/         # State management
-    │   ├── screens/           # UI screens
-    │   └── services/          # API service layer
-    ├── pubspec.yaml
-    └── ... platform folders
-```
+### 6) 🚀 Performance & Sync Improvements
+- **Offline-First Implementation**: Operated via a highly responsive frontend (`local_db_service.dart`) utilizing local databases to cache the session.
+- **Background Sync Engine**: Allows modifying, creating, and deleting records dynamically without network wait times (`offline_sync_service.dart`). Syncs delta changes automatically when connectivity resumes.
+- **Redis Caching Pipeline**: On the backend level, heavy analytical operations, trend compilations, and heatmaps traverse a Redis caching layer, significantly dropping payload response times. Cache invalidation operates surgically per user changes.
+- **Automated Summary Reports**: node-cron fires at exactly `23:55` daily to aggregate unclosed user cycles into a formal, permanent `Report` document.
 
 ---
 
-## Tech stack
+## 🛠 Tech Stack
 
 ### Frontend
-- Flutter (Dart)
-- Provider (state management)
-- HTTP client
-- Shared Preferences (token/session persistence)
-- fl_chart (analytics charting)
+- **Framework**: Flutter (Dart)
+- **State Management**: Provider
+- **Storage/Sync**: Native SharedPreferences & Custom Local DB queues
+- **UI Elements**: fl_chart (for beautiful data/heatmaps visual elements)
+- **Networking**: Dart HTTP clients natively formatted for REST.
 
 ### Backend
-- Node.js + Express
-- TypeScript
-- MongoDB + Mongoose
-- JWT authentication
-- bcryptjs password hashing
-- node-cron
-- Groq SDK (LLM feedback generation)
+- **Environment**: Node.js + Express
+- **Language**: TypeScript
+- **Database**: MongoDB + Mongoose
+- **Cache Layer**: Redis (ioredis)
+- **Authentication**: JWT + bcryptjs
+- **Scheduling**: node-cron
+- **AI Integration**: Groq SDK
 
 ---
 
-## Feature walkthrough
+## 📊 Architecture & Data Models
 
-## 1) Authentication
+### User
+- `name`, `email`, `password` (hashed payload)
+- `profilePhoto` (optional URL string)
+- `categories` (array of strings, user-defined, populated with defaults)
 
-- Email/password register
-- Email/password login
-- JWT returned and stored client-side
-- Authenticated `/me` and protected routes
+### Task
+- `userId` (ObjectId bound)
+- `taskName` (String)
+- `date` (Date object bounding the task to a day)
+- `isCompleted` (Boolean threshold)
 
-## 2) Task management
+### TimeSlot
+- `userId` (ObjectId)
+- `date` (Date object mapping slot bounds)
+- `timeRange` (String pattern, e.g. "09:00-09:20")
+- `taskSelected` (String mapping to the active duty)
+- `category` (String mapping to broader groups)
+- `productivityType` (Enum explicitly spanning `Productive` | `Neutral` | `Wasted`)
 
-- Create a task with date and name
-- Fetch tasks for a specific day
-- Mark task complete
-- No rename/delete endpoint (intentional immutable rule)
-
-## 3) Time slot tracking
-
-- Create time slot entries with:
-  - date
-  - timeRange (e.g., `09:00-09:20`)
-  - taskSelected
-  - category
-  - productivityType
-- If slot for same user + day + time range already exists, backend updates existing slot instead of duplicating.
-- Fetch, update, and delete supported.
-
-## 4) Categories
-
-- Default categories initialized on user model
-- Fetch categories
-- Replace categories list
-
-## 5) Analytics
-
-- Fetch day/week analytics by date
-- Computes:
-  - total/productive/wasted/neutral minutes
-  - productivity %
-  - category breakdown
-  - task breakdown
-  - productivity by category
-- Optionally includes AI summary from Groq API.
-
-## 6) Profile
-
-- Fetch profile
-- Update name and profile photo field
+### Report
+- `userId` (ObjectId)
+- `date` (Date object defining compiled end target)
+- `summary` (String - compilation message)
+- `productivityScore` (Decimal index measuring 0-100 efficiency)
 
 ---
 
-## How data is modeled
+## 📡 API Reference (Detailed)
 
-## User
-Fields include:
-- `name`, `email`, optional `password`
-- optional `googleId`
-- optional `profilePhoto`
-- `categories` array with defaults
+> Base URL routing prefix: `/api`
+> Most endpoints enforce `Authorization: Bearer <token>` through the middleware.
 
-Password hashing occurs in a Mongoose pre-save hook.
+### 🔐 Authentication (`/api/auth/*`)
+- **`POST /register`**: Registers a new user session. Needs `{ name, email, password }`. Generates user document and initial categories.
+- **`POST /login`**: Validates `{ email, password }` and releases a signed JWT.
+- **`GET /me`**: Provides full resolution of currently signed-in user payload.
 
-## Task
-- `userId`
-- `taskName`
-- `date`
-- `isCompleted`
+### 👤 Users (`/api/users/*`)
+- **`GET /profile`**: Fetches identity details.
+- **`PUT /profile`**: Updates identity fields `{ name, profilePhoto }`.
+- **`GET /categories`**: Returns an array of customized category strings.
+- **`PUT /categories`**: Completely overrides category mapping, sending `{ categories: ["...", "..."] }`.
 
-## TimeSlot
-- `userId`
-- `date`
-- `timeRange`
-- `taskSelected` (mixed type)
-- `category`
-- `productivityType` enum (`Productive` | `Neutral` | `Wasted`)
+### 📋 Tasks (`/api/tasks/*`)
+- **`GET /`**: Pull all tasks. Sift by query param `?date=<YYYY-MM-DD>`.
+- **`POST /`**: Stage a new task `{ taskName, date }`.
+- **`PUT /:id`**: Edits arbitrary attributes of a task dynamically.
+- **`DELETE /:id`**: Strip a task from the board permanently.
+- **`PUT /:id/complete`**: Marks `isCompleted: true`.
 
-## Report
-- Used by cron summary logic
-- Stores end-of-day summary and score
+### ⏳ Time Slots (`/api/slots/*`)
+- **`GET /`**: Fetches sequentially ordered blocks of 20-min slots tracked `?date=<YYYY-MM-DD>`.
+- **`POST /`**: Posts an entry log. Needs `{ date, timeRange, taskSelected, category, productivityType }`. Intelligently performs an UPSERT (Update or Insert) rule: overriding existing identical ranges for the same day to maintain 1:1 timeline continuity.
+- **`PUT /:id`**: Modify any metadata around an already logged ID directly.
+- **`DELETE /:id`**: Wipes out a specific block of tracked history.
 
----
+### 📈 Analytics (`/api/analytics/*`)
+> *Responses via these controllers automatically bridge with the Redis cache.*
+- **`GET /weekly-trend`**: Rebuilds absolute trajectories of the trailing week performance metrics.
+- **`GET /heatmap`**: Issues intense categorical data mapping coordinate heat strengths for UI ingestion.
+- **`GET /:period`**: Parameterezes `day` or `week`. (E.g. `/api/analytics/day?date=2024-03-31`). Returns calculated:
+   - Absolute minutes mapping (Productive, Wasted, Neutral, Total).
+   - Productivity %.
+   - Array segmentations tracking the specific weight of custom categories.
+   - Array task allocations.
 
-## API reference
+### 🤖 AI Coaching (`/api/ai/*`)
+- **`GET /insights`**: Triggers a backend-to-Groq request encapsulating the context of user activities to fetch customized string directives and improvements.
 
-> Base prefix: `/api`
-
-## Auth
-
-### `POST /auth/register`
-Body:
-```json
-{ "name": "Ada", "email": "ada@example.com", "password": "secret123" }
-```
-
-### `POST /auth/login`
-Body:
-```json
-{ "email": "ada@example.com", "password": "secret123" }
-```
-
-### `GET /auth/me`
-Requires `Authorization: Bearer <token>`
+### 📄 Reports (`/api/reports/*`)
+- **`GET /`**: Lists historically verified scores injected systematically by the backend daily cron processor. 
 
 ---
 
-## User
+## 💻 Local Development Setup
 
-### `GET /users/categories`
-Get current user categories.
+### Prerequisites
+- Node.js 18+ and npm 9+
+- Flutter SDK (stable channel, matching `pubspec.yaml`)
+- MongoDB Local Instance or Atlas URL
+- Redis Server (Native / Dockerized / Cloud)
 
-### `PUT /users/categories`
-Body:
-```json
-{ "categories": ["Study", "Work", "Gym"] }
-```
-
-### `GET /users/profile`
-Get profile.
-
-### `PUT /users/profile`
-Body example:
-```json
-{ "name": "Ada Lovelace", "profilePhoto": "https://..." }
-```
-
----
-
-## Tasks
-
-### `POST /tasks`
-Body:
-```json
-{ "taskName": "Revise system design", "date": "2026-03-31T09:00:00.000Z" }
-```
-
-### `GET /tasks?date=<iso-date>`
-Returns tasks for the provided day.
-
-### `PUT /tasks/:id/complete`
-Marks task completed.
-
----
-
-## Slots
-
-### `POST /slots`
-Body:
-```json
-{
-  "date": "2026-03-31T09:00:00.000Z",
-  "timeRange": "09:00-09:20",
-  "taskSelected": "Revise system design",
-  "category": "Study",
-  "productivityType": "Productive"
-}
-```
-
-### `GET /slots?date=<iso-date>`
-Returns slots for day sorted by `timeRange`.
-
-### `PUT /slots/:id`
-Partial update of slot fields.
-
-### `DELETE /slots/:id`
-Deletes one slot.
-
----
-
-## Analytics
-
-### `GET /analytics/:period?date=<iso-date>`
-Where `period` is currently `day` or `week`.
-
-Response includes:
-- minute totals
-- productivity percentage
-- category/task breakdown
-- category productivity map
-- AI insights text
-
----
-
-## Local development setup
-
-## Prerequisites
-- Node.js 18+
-- npm 9+
-- Flutter SDK (matching Dart SDK constraints in `pubspec.yaml`)
-- MongoDB instance (local or hosted)
-
----
-
-## Frontend setup (Flutter)
-
+### Frontend (Flutter)
 ```bash
 cd frontend
 flutter pub get
 ```
-
-Update API base URL in:
-- `frontend/lib/core/api_config.dart`
-
-Current default:
-- `http://192.168.1.103:5000/api`
-
-For Android emulator typically use:
-- `http://10.0.2.2:5000/api`
-
-Run app:
+You MUST update the URL pathing internally in `frontend/lib/core/api_config.dart`.
+- Normal Web / Host target: `http://localhost:5000/api`
+- Android Emulator target: `http://10.0.2.2:5000/api`
 ```bash
 flutter run
 ```
 
----
-
-## Backend setup (Express + MongoDB)
-
+### Backend (Express)
 ```bash
 cd backend
 npm install
 ```
-
-Create `.env` (see next section), then:
-
+Setup your local `.env`, and engage nodemon:
 ```bash
 npm run dev
 ```
 
-For production build:
-
-```bash
-npm run build
-npm start
-```
-
 ---
 
-## Environment variables
+## 🔒 Environment Variables
 
-Create `backend/.env`:
+Copy to `backend/.env`:
 
 ```env
 PORT=5000
 MONGO_URI=<your-mongodb-connection-string>
-JWT_SECRET=<your-strong-jwt-secret>
-GOOGLE_CLIENT_ID=<optional-or-future-use>
-GROQ_API_KEY=<optional-for-ai-insights>
+REDIS_URI=<your-redis-connection-string-for-caching>
+JWT_SECRET=<your-very-strong-jwt-secret>
+GROQ_API_KEY=<groq-portal-key-optional>
 NODE_ENV=development
 ```
 
-Notes:
-- If `GROQ_API_KEY` is missing, analytics still work, but insight text falls back to a helper message.
-- `JWT_SECRET` has a fallback in code, but you should always define a strong secret in real environments.
+Note: Passing an empty `REDIS_URI` degrades caching but will not halt the application. Missing `GROQ_API_KEY` reverts to a fallback string generator for insights safely.
 
 ---
 
-## Running the app end-to-end
+## ☁️ Deployment & Production Config
 
-1. Start backend on port 5000.
-2. Ensure frontend `ApiConfig.baseUrl` points to the running backend.
-3. Run Flutter app.
-4. Register a new account.
-5. Create tasks for today.
-6. Fill time slots.
-7. Open analytics/dashboard and validate computed metrics.
+- Refer strictly to `backend/deployment_guide.md` if pushing directly to **Vercel** serverless configurations. 
+- Due to the nature of serverless, `node-cron` skips memory instantiation under `NODE_ENV=production`. You will need to trigger cron operations using cloud provider cron-schedulers mapping to an independent `/api/reports/trigger` route conceptually.
 
 ---
 
-## Analytics and AI insights details
+## 🚧 Known Limitations & Troubleshooting
 
-The analytics logic assumes each slot equals **20 minutes**.
-
-From slots in selected period, backend computes:
-- `productiveMinutes = productiveSlotCount * 20`
-- `wastedMinutes = wastedSlotCount * 20`
-- `neutralMinutes = neutralSlotCount * 20`
-- `totalMinutes = totalSlotCount * 20`
-- `productivityPercentage = productiveMinutes / totalMinutes * 100`
-
-Then it constructs category/task maps and sends a compact prompt payload to Groq for feedback generation.
-
-If Groq call fails, API still returns analytics with fallback insights text.
+- **Server Connection**: The most common initialization issue is connecting Flutter over Android. Be absolutely sure `10.0.2.2:5000` is targeted and ensure your machine's firewall allows inbound port `5000`.
+- **Timezone Drift**: Analytics assumes 20-minute slot increments uniformly and handles Date objects locally. Severe cross-timezone usage across devices simultaneously requires active UI refreshing.
+- **Offline Sync Rejection**: In rare cases of heavily disjointed edits, the offline queue sync will heavily prioritize the most *recently* verified backend state. Pull-to-refresh will hard reset client states in misalignment.
 
 ---
 
-## Cron job behavior
+## 🗺 Roadmap
 
-- A cron job is registered (non-production mode) to run at `23:55` daily.
-- It scans each user’s tasks for the day.
-- Creates a `Report` with completion summary + productivity score.
-
-Important:
-- In production/serverless environments like Vercel, built-in cron execution differs; backend code conditionally skips local cron init under production mode.
-
----
-
-## Deployment notes
-
-Backend includes `backend/deployment_guide.md` with Vercel-focused steps.
-
-Summary:
-- Install Vercel CLI
-- Run deploy from `backend`
-- Ensure environment variables are configured in Vercel settings
-- `vercel.json` maps API requests to Express entrypoint
-
----
-
-## Security and auth notes
-
-- Auth uses bearer JWT on protected endpoints.
-- Passwords are hashed with bcrypt pre-save hook.
-- CORS is enabled globally.
-- There is currently no rate limiting or refresh token flow.
-
-Recommended hardening before production:
-- Add helmet, request throttling, and stricter CORS origin config.
-- Add token revocation or short-lived access + refresh pattern.
-- Add validation layer (e.g., zod/joi) for all request payloads.
-- Remove fallback secrets and enforce required env vars on boot.
-
----
-
-## Known limitations / implementation notes
-
-- `GOOGLE_CLIENT_ID` is present in env guidance but Google auth endpoints are not active in current API routes.
-- Slot “upsert by day + timeRange” behavior is helpful but should be clearly represented in UI to avoid confusion.
-- Timezone handling relies on JavaScript Date; cross-timezone users may need explicit locale/day-boundary normalization.
-- `taskSelected` in slots is mixed type (string/object id), which is flexible but can complicate strict typing and analytics consistency.
-- Flutter API base URL is hard-coded and should ideally be environment-driven for multiple targets.
-
----
-
-## Troubleshooting
-
-## Backend won’t start
-- Verify `.env` exists in `backend`.
-- Confirm `MONGO_URI` is reachable.
-- Confirm port is not occupied.
-
-## Unauthorized errors on protected routes
-- Ensure login/register was successful and token stored.
-- Confirm requests include `Authorization: Bearer <token>`.
-
-## No AI insights shown
-- Set `GROQ_API_KEY`.
-- Check backend logs for Groq API errors.
-
-## App can’t reach backend from emulator/device
-- Use correct host for your runtime:
-  - Android emulator: `10.0.2.2`
-  - iOS simulator: often `localhost`
-  - Physical device: host machine LAN IP
-- Ensure firewall allows inbound port 5000.
-
----
-
-## Suggested roadmap
-
-- Add refresh token auth + secure storage strategy.
-- Add Google sign-in endpoints and complete OAuth flow.
-- Add task delete/archive with audit trail.
-- Add recurring tasks and habit templates.
-- Add monthly analytics and trend comparisons.
-- Add export/report download (CSV/PDF).
-- Add CI checks (lint/test/build) and pre-commit hooks.
-- Add containerized dev environment (Docker Compose: Flutter web + API + Mongo).
-
----
-
-## License
-
-No license file is currently present in this repository.
-If you intend this to be open source, add a `LICENSE` file (e.g., MIT/Apache-2.0) and update this section.
+- **Push Notifications via Firebase** tracking unlogged gaps.
+- Full OAuth2 pipeline integration for seamless Google Sign-In.
+- Dark/Light automatic UI parity based on native device styling.
+- Export mechanism downloading fully structured PDF reports of analytics tables over the spanning calendar year. 
