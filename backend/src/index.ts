@@ -7,6 +7,7 @@ import slotRoutes from './routes/slotRoutes';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
+import reportRoutes from './routes/reportRoutes';
 import { initCronJobs } from './services/cronService';
 
 dotenv.config();
@@ -22,6 +23,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/slots', slotRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/reports', reportRoutes);
 
 app.get('/', (req, res) => res.send('Productivity API is running'));
 
