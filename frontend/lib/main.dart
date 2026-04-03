@@ -20,7 +20,11 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ProductivityProvider()),
+        ChangeNotifierProvider(create: (_) {
+          final provider = ProductivityProvider();
+          provider.init();
+          return provider;
+        }),
       ],
       child: const ProductivityApp(),
     ),

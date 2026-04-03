@@ -1,56 +1,72 @@
 import { Request, Response } from 'express';
 import TimeSlot from '../models/TimeSlot';
-import { getCache, setCache, invalidateUserAnalytics, deleteCacheKeys } from '../services/redisService';
+import {
+  getCache, setCache,
+  invalidateAnalyticsForDate,
+  writeThroughSlotsCache,
+  getCachedSlots,
+} from '../services/redisService';
 
-// @desc    Create a new time slot
+// ─── Helper: get all slots for a date as plain objects ──────────────────────
+const fetchAndCacheSlots = async (userId: string, dateKey: string, queryDate: Date) => {
+  const startOfDay = new Date(queryDate);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(queryDate);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const slots = await TimeSlot.find({
+    userId,
+    date: { $gte: startOfDay, $lte: endOfDay },
+  }).sort({ timeRange: 1 }).lean();
+
+  await writeThroughSlotsCache(userId, dateKey, slots);
+  return slots;
+};
+
+// @desc    Create or upsert a time slot
 // @route   POST /api/slots
 export const createTimeSlot = async (req: Request, res: Response) => {
   const { date, timeRange, taskSelected, category, productivityType } = req.body;
   const user = (req as any).user;
 
   try {
-    // Check if slot already exists for this user + date + timeRange
     const queryDate = new Date(date);
     const startOfDay = new Date(queryDate);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(queryDate);
     endOfDay.setHours(23, 59, 59, 999);
+    const dateKey = queryDate.toISOString().split('T')[0];
 
     const existing = await TimeSlot.findOne({
       userId: user._id,
       timeRange,
-      date: { $gte: startOfDay, $lte: endOfDay }
+      date: { $gte: startOfDay, $lte: endOfDay },
     });
 
+    let result;
     if (existing) {
-      // Update existing slot instead of creating duplicate
       existing.taskSelected = taskSelected;
       existing.category = category;
       existing.productivityType = productivityType;
       existing.date = new Date(date);
       await existing.save();
-
-      const dateKey = queryDate.toISOString().split('T')[0];
-      await deleteCacheKeys([`user:${user._id}:slots:${dateKey}`]);
-      await invalidateUserAnalytics(user._id.toString());
-
-      return res.status(200).json(existing);
+      result = existing;
+    } else {
+      result = await TimeSlot.create({
+        userId: user._id,
+        date: new Date(date),
+        timeRange,
+        taskSelected,
+        category,
+        productivityType,
+      });
     }
 
-    const slot = await TimeSlot.create({
-      userId: user._id,
-      date: new Date(date),
-      timeRange,
-      taskSelected,
-      category,
-      productivityType,
-    });
+    // Write-through: update slot cache immediately, then invalidate analytics
+    await fetchAndCacheSlots(user._id.toString(), dateKey, queryDate);
+    await invalidateAnalyticsForDate(user._id.toString(), dateKey);
 
-    const dateKey = queryDate.toISOString().split('T')[0];
-    await deleteCacheKeys([`user:${user._id}:slots:${dateKey}`]);
-    await invalidateUserAnalytics(user._id.toString());
-
-    res.status(201).json(slot);
+    return res.status(existing ? 200 : 201).json(result);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
   }
@@ -65,22 +81,16 @@ export const getTimeSlots = async (req: Request, res: Response) => {
   try {
     const queryDate = new Date(date as string);
     const dateKey = queryDate.toISOString().split('T')[0];
-    const cacheKey = `user:${user._id}:slots:${dateKey}`;
 
-    const cachedData = await getCache(cacheKey);
-    if (cachedData) return res.json(cachedData);
+    const cached = await getCachedSlots(user._id.toString(), dateKey);
+    if (cached) {
+      // Set cache-control header so clients know it's cached
+      res.set('X-Cache', 'HIT');
+      return res.json(cached);
+    }
 
-    const startOfDay = new Date(queryDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(queryDate);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const slots = await TimeSlot.find({
-      userId: user._id,
-      date: { $gte: startOfDay, $lte: endOfDay }
-    }).sort({ timeRange: 1 });
-
-    await setCache(cacheKey, slots, 3600);
+    const slots = await fetchAndCacheSlots(user._id.toString(), dateKey, queryDate);
+    res.set('X-Cache', 'MISS');
     res.json(slots);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
@@ -96,19 +106,17 @@ export const updateTimeSlot = async (req: Request, res: Response) => {
 
   try {
     const slot = await TimeSlot.findOne({ _id: id, userId: user._id });
-    if (!slot) {
-      return res.status(404).json({ message: 'Time slot not found' });
-    }
+    if (!slot) return res.status(404).json({ message: 'Time slot not found' });
 
     if (taskSelected !== undefined) slot.taskSelected = taskSelected;
     if (category !== undefined) slot.category = category;
     if (productivityType !== undefined) slot.productivityType = productivityType;
-
     await slot.save();
 
     const dateKey = new Date(slot.date).toISOString().split('T')[0];
-    await deleteCacheKeys([`user:${user._id}:slots:${dateKey}`]);
-    await invalidateUserAnalytics(user._id.toString());
+    const queryDate = new Date(slot.date);
+    await fetchAndCacheSlots(user._id.toString(), dateKey, queryDate);
+    await invalidateAnalyticsForDate(user._id.toString(), dateKey);
 
     res.json(slot);
   } catch (error: any) {
@@ -124,15 +132,69 @@ export const deleteTimeSlot = async (req: Request, res: Response) => {
 
   try {
     const slot = await TimeSlot.findOneAndDelete({ _id: id, userId: user._id });
-    if (!slot) {
-      return res.status(404).json({ message: 'Time slot not found' });
-    }
+    if (!slot) return res.status(404).json({ message: 'Time slot not found' });
 
     const dateKey = new Date(slot.date).toISOString().split('T')[0];
-    await deleteCacheKeys([`user:${user._id}:slots:${dateKey}`]);
-    await invalidateUserAnalytics(user._id.toString());
+    const queryDate = new Date(slot.date);
+    await fetchAndCacheSlots(user._id.toString(), dateKey, queryDate);
+    await invalidateAnalyticsForDate(user._id.toString(), dateKey);
 
     res.json({ message: 'Time slot deleted' });
+  } catch (error: any) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// @desc    Batch upsert multiple time slots at once
+// @route   PATCH /api/slots/batch
+export const batchUpdateTimeSlots = async (req: Request, res: Response) => {
+  const { date, timeRanges, taskSelected, category, productivityType } = req.body;
+  const user = (req as any).user;
+
+  if (!Array.isArray(timeRanges) || timeRanges.length === 0) {
+    return res.status(400).json({ message: 'timeRanges must be a non-empty array' });
+  }
+
+  try {
+    const queryDate = new Date(date);
+    const startOfDay = new Date(queryDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(queryDate);
+    endOfDay.setHours(23, 59, 59, 999);
+    const dateKey = queryDate.toISOString().split('T')[0];
+
+    const results = await Promise.all(
+      timeRanges.map(async (timeRange: string) => {
+        const existing = await TimeSlot.findOne({
+          userId: user._id,
+          timeRange,
+          date: { $gte: startOfDay, $lte: endOfDay },
+        });
+
+        if (existing) {
+          existing.taskSelected = taskSelected;
+          existing.category = category;
+          existing.productivityType = productivityType;
+          await existing.save();
+          return existing;
+        } else {
+          return TimeSlot.create({
+            userId: user._id,
+            date: new Date(date),
+            timeRange,
+            taskSelected,
+            category,
+            productivityType,
+          });
+        }
+      })
+    );
+
+    // Write-through then invalidate analytics
+    await fetchAndCacheSlots(user._id.toString(), dateKey, queryDate);
+    await invalidateAnalyticsForDate(user._id.toString(), dateKey);
+
+    res.json(results);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
   }

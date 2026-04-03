@@ -24,13 +24,14 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 700),
     );
     _fadeAnim =
         CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _animController.forward();
 
     Future.microtask(() {
+      if (!mounted) return;
       final provider = context.read<ProductivityProvider>();
       provider.loadDailyData(DateTime.now());
       provider.loadWeeklyTrend();
@@ -66,87 +67,86 @@ class _DashboardScreenState extends State<DashboardScreen>
                   await provider.loadWeeklyTrend();
                 },
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                  padding: const EdgeInsets.only(bottom: 100),
                   children: [
-                    // Header
-                    _buildHeader(),
-                    const SizedBox(height: 20),
+                    // ── Hero section ────────────────────────────────────
+                    _buildHeroSection(provider),
 
-                    // Productivity Index + Quick Stats
-                    _buildProductivitySection(provider),
-                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 16),
 
-                    // Quick Stats Row
-                    _buildQuickStats(provider),
-                    const SizedBox(height: 20),
+                          // Live metric chips
+                          _buildMetricChips(provider),
+                          const SizedBox(height: 20),
 
-                    // Task Checklist
-                    _buildTaskChecklist(provider),
-                    const SizedBox(height: 16),
+                          // Task Checklist
+                          _buildTaskChecklist(provider),
+                          const SizedBox(height: 16),
 
-                    // Donut Chart — Category Time
-                    CollapsibleCard(
-                      title: 'Time by Category',
-                      icon: Icons.donut_large_rounded,
-                      iconColor: AppColors.primaryPurple,
-                      child: _buildDonutChart(provider),
+                          // Donut Chart
+                          CollapsibleCard(
+                            title: 'Time by Category',
+                            icon: Icons.donut_large_rounded,
+                            iconColor: AppColors.primaryPurple,
+                            child: _buildDonutChart(provider),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Productivity Split
+                          CollapsibleCard(
+                            title: 'Productivity Split',
+                            icon: Icons.pie_chart_rounded,
+                            iconColor: AppColors.primaryGreen,
+                            child: _buildProductivityPie(provider),
+                          ),
+                          const SizedBox(height: 16),
+
+                          if (provider.weeklyTrendLoaded) ...[
+                            CollapsibleCard(
+                              title: 'Tasks Overview',
+                              icon: Icons.bar_chart_rounded,
+                              iconColor: AppColors.softOrange,
+                              child: _buildTasksBarChart(provider),
+                            ),
+                            const SizedBox(height: 16),
+                            CollapsibleCard(
+                              title: 'Weekly Trend',
+                              icon: Icons.show_chart_rounded,
+                              iconColor: AppColors.primaryBlue,
+                              child: _buildProductivityLineChart(provider),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          if (provider.weeklyTrendLoaded &&
+                              provider.cumulativeFocus.isNotEmpty) ...[
+                            CollapsibleCard(
+                              title: 'Cumulative Focus',
+                              icon: Icons.stacked_line_chart_rounded,
+                              iconColor: AppColors.softTeal,
+                              child: _buildCumulativeAreaChart(provider),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          if (provider.categoryBreakdown.isNotEmpty) ...[
+                            CollapsibleCard(
+                              title: 'Time vs Productivity',
+                              icon: Icons.scatter_plot_rounded,
+                              iconColor: AppColors.softLavender,
+                              child: _buildScatterPlot(provider),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          if (provider.aiInsightsLoaded)
+                            _buildAIInsightsCard(provider),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
-
-                    // Pie Chart — Productive vs Unproductive
-                    CollapsibleCard(
-                      title: 'Productivity Split',
-                      icon: Icons.pie_chart_rounded,
-                      iconColor: AppColors.primaryGreen,
-                      child: _buildProductivityPie(provider),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Bar Chart — Tasks Completed vs Missed
-                    if (provider.weeklyTrendLoaded)
-                      CollapsibleCard(
-                        title: 'Tasks Overview',
-                        icon: Icons.bar_chart_rounded,
-                        iconColor: AppColors.softOrange,
-                        child: _buildTasksBarChart(provider),
-                      ),
-                    if (provider.weeklyTrendLoaded) const SizedBox(height: 16),
-
-                    // Line Chart — Productivity Trend
-                    if (provider.weeklyTrendLoaded)
-                      CollapsibleCard(
-                        title: 'Weekly Trend',
-                        icon: Icons.show_chart_rounded,
-                        iconColor: AppColors.primaryBlue,
-                        child: _buildProductivityLineChart(provider),
-                      ),
-                    if (provider.weeklyTrendLoaded) const SizedBox(height: 16),
-
-                    // Area Chart — Cumulative Focus
-                    if (provider.weeklyTrendLoaded &&
-                        provider.cumulativeFocus.isNotEmpty)
-                      CollapsibleCard(
-                        title: 'Cumulative Focus',
-                        icon: Icons.stacked_line_chart_rounded,
-                        iconColor: AppColors.softTeal,
-                        child: _buildCumulativeAreaChart(provider),
-                      ),
-                    if (provider.weeklyTrendLoaded) const SizedBox(height: 16),
-
-                    // Scatter Plot — Time vs Completion
-                    if (provider.categoryBreakdown.isNotEmpty)
-                      CollapsibleCard(
-                        title: 'Time vs Productivity',
-                        icon: Icons.scatter_plot_rounded,
-                        iconColor: AppColors.softLavender,
-                        child: _buildScatterPlot(provider),
-                      ),
-                    if (provider.categoryBreakdown.isNotEmpty)
-                      const SizedBox(height: 16),
-
-                    // AI Insights
-                    if (provider.aiInsightsLoaded)
-                      _buildAIInsightsCard(provider),
                   ],
                 ),
               ),
@@ -157,7 +157,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildHeader() {
+  // ─── Hero Section ──────────────────────────────────────────────────────────
+
+  Widget _buildHeroSection(ProductivityProvider provider) {
     final now = DateTime.now();
     final greeting = now.hour < 12
         ? 'Good Morning'
@@ -165,66 +167,141 @@ class _DashboardScreenState extends State<DashboardScreen>
             ? 'Good Afternoon'
             : 'Good Evening';
 
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(greeting,
-                  style: AppTextStyles.caption.copyWith(fontSize: 14)),
-              const SizedBox(height: 4),
-              Text('Dashboard', style: AppTextStyles.h1),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: AppShadows.softShadow,
-          ),
-          child: const Icon(Icons.today_rounded,
-              color: AppColors.primaryBlue, size: 22),
-        ),
-      ],
-    );
-  }
+    final greetingEmoji = now.hour < 12
+        ? '☀️'
+        : now.hour < 17
+            ? '⚡'
+            : '🌙';
 
-  Widget _buildProductivitySection(ProductivityProvider provider) {
-    return AppCard(
-      child: Row(
-        children: [
-          AnimatedScoreRing(
-            score: provider.productivityIndex.toDouble(),
-            size: 120,
-            strokeWidth: 10,
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF1A73E8),
+            const Color(0xFF6C63FF),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1A73E8).withValues(alpha: 0.3),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        ],
+      ),
+      child: Stack(
+        children: [
+          // Decorative circles
+          Positioned(
+            right: -20, top: -20,
+            child: Container(
+              width: 120, height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 40, bottom: -30,
+            child: Container(
+              width: 80, height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.04),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Row(
               children: [
-                Text('Productivity Index',
-                    style: AppTextStyles.label.copyWith(letterSpacing: 0.5)),
-                const SizedBox(height: 4),
-                Text(
-                  _getScoreLabel(provider.productivityIndex),
-                  style: AppTextStyles.h3.copyWith(
-                    color: AppColors.productivityIndexColor(
-                        provider.productivityIndex.toDouble()),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Online/offline pill
+                      _buildConnectionPill(provider),
+                      const SizedBox(height: 12),
+                      Text(
+                        '$greetingEmoji $greeting',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Dashboard',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Progress bar for today
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                _getScoreLabel(provider.productivityIndex),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${provider.productivityIndex}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: LinearProgressIndicator(
+                              value: provider.productivityIndex / 100,
+                              backgroundColor: Colors.white.withValues(alpha: 0.2),
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                  Colors.white),
+                              minHeight: 8,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            provider.totalMinutes > 0
+                                ? '${formatTime(provider.totalMinutes)} tracked today'
+                                : 'No time tracked yet',
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '${provider.totalMinutes > 0 ? "${formatTime(provider.totalMinutes)} tracked" : "No time tracked"}',
-                  style: AppTextStyles.caption,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${provider.completedTasks}/${provider.totalTasks} tasks done',
-                  style: AppTextStyles.caption,
+                const SizedBox(width: 16),
+                AnimatedScoreRing(
+                  score: provider.productivityIndex.toDouble(),
+                  size: 90,
+                  strokeWidth: 8,
                 ),
               ],
             ),
@@ -234,73 +311,114 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  String _getScoreLabel(int score) {
-    if (score >= 80) return 'Excellent! 🔥';
-    if (score >= 60) return 'Great Work! 💪';
-    if (score >= 40) return 'Keep Going! ⚡';
-    if (score >= 20) return 'Needs Focus 🎯';
-    return 'Get Started! 🚀';
+  Widget _buildConnectionPill(ProductivityProvider provider) {
+    final isOnline = provider.isOnline;
+    final pending = provider.pendingSyncCount;
+    final label = !isOnline
+        ? '⚡ Offline mode'
+        : pending > 0
+            ? '🔄 $pending unsynced'
+            : '✅ All synced';
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 400),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
   }
 
-  Widget _buildQuickStats(ProductivityProvider provider) {
+  // ─── Live Metric Chips ────────────────────────────────────────────────────
+
+  Widget _buildMetricChips(ProductivityProvider provider) {
     return Row(
       children: [
-        Expanded(
-          child: _miniStat('Focused',
-              formatTime(provider.productiveMinutes), AppColors.productive),
+        _metricChip(
+          '🎯 Focused',
+          formatTime(provider.productiveMinutes),
+          AppColors.productive,
+          provider.productiveMinutes / (provider.totalMinutes > 0 ? provider.totalMinutes : 1),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _miniStat('Wasted',
-              formatTime(provider.wastedMinutes), AppColors.wasted),
+        const SizedBox(width: 8),
+        _metricChip(
+          '💤 Wasted',
+          formatTime(provider.wastedMinutes),
+          AppColors.wasted,
+          provider.wastedMinutes / (provider.totalMinutes > 0 ? provider.totalMinutes : 1),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _miniStat('Neutral',
-              formatTime(provider.neutralMinutes), AppColors.neutral),
+        const SizedBox(width: 8),
+        _metricChip(
+          '⚡ Neutral',
+          formatTime(provider.neutralMinutes),
+          AppColors.neutral,
+          provider.neutralMinutes / (provider.totalMinutes > 0 ? provider.totalMinutes : 1),
         ),
       ],
     );
   }
 
-  Widget _miniStat(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: AppShadows.softShadow,
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 32, height: 32,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+  Widget _metricChip(
+      String label, String value, Color color, double fraction) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: AppShadows.softShadow,
+          border: Border.all(
+              color: color.withValues(alpha: 0.15), width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
             ),
-            child: Icon(
-              label == 'Focused'
-                  ? Icons.bolt_rounded
-                  : label == 'Wasted'
-                      ? Icons.warning_amber_rounded
-                      : Icons.balance_rounded,
-              color: color,
-              size: 16,
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: fraction.clamp(0.0, 1.0),
+                backgroundColor: color.withValues(alpha: 0.1),
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+                minHeight: 4,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(value,
-              style: AppTextStyles.bodyBold.copyWith(fontSize: 16, color: color)),
-          const SizedBox(height: 2),
-          Text(label, style: AppTextStyles.caption.copyWith(fontSize: 10)),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: AppTextStyles.caption.copyWith(fontSize: 10),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // ─── Task Checklist ────────────────────────────────────
+  // ─── Task Checklist ───────────────────────────────────────────────────────
+
   Widget _buildTaskChecklist(ProductivityProvider provider) {
+    final completed = provider.tasks.where((t) => t.isCompleted).length;
+    final total = provider.tasks.length;
+    final progress = total > 0 ? completed / total : 0.0;
+
     return AppCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -320,17 +438,44 @@ class _DashboardScreenState extends State<DashboardScreen>
               const SizedBox(width: 12),
               Text("Today's Tasks", style: AppTextStyles.h3),
               const Spacer(),
-              if (provider.tasks.isNotEmpty)
-                Text(
-                  '${provider.tasks.where((t) => t.isCompleted).length}/${provider.tasks.length}',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.primaryGreen, fontWeight: FontWeight.w600),
+              if (total > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryGreen.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$completed/$total',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.primaryGreen,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
             ],
           ),
+          // Completion progress bar
+          if (total > 0) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: progress),
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeOutCubic,
+                builder: (_, value, __) => LinearProgressIndicator(
+                  value: value,
+                  backgroundColor: AppColors.border,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.primaryGreen),
+                  minHeight: 6,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
-
-          // Task list
           ...provider.tasks.map((task) => TaskListItem(
                 taskName: task.taskName,
                 isCompleted: task.isCompleted,
@@ -339,8 +484,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ? null
                     : () => provider.completeTask(task),
               )),
-
-          // Add task
           const SizedBox(height: 8),
           Row(
             children: [
@@ -349,7 +492,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   controller: _taskController,
                   style: AppTextStyles.bodyBold.copyWith(fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: 'Add a task (immutable after creation)...',
+                    hintText: 'Add a task...',
                     hintStyle: AppTextStyles.caption.copyWith(
                         color: AppColors.textHint, fontSize: 12),
                     contentPadding: const EdgeInsets.symmetric(
@@ -369,8 +512,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               GestureDetector(
                 onTap: () {
                   if (_taskController.text.trim().isNotEmpty) {
-                    provider.addTask(
-                        _taskController.text.trim(), DateTime.now());
+                    provider.addTask(_taskController.text.trim(), DateTime.now());
                     _taskController.clear();
                   }
                 },
@@ -391,7 +533,16 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ─── Donut Chart: Category Time ────────────────────────
+  String _getScoreLabel(int score) {
+    if (score >= 80) return 'Excellent! 🔥';
+    if (score >= 60) return 'Great Work! 💪';
+    if (score >= 40) return 'Keep Going! ⚡';
+    if (score >= 20) return 'Needs Focus 🎯';
+    return 'Get Started! 🚀';
+  }
+
+  // ─── Donut Chart ──────────────────────────────────────────────────────────
+
   Widget _buildDonutChart(ProductivityProvider provider) {
     final data = provider.categoryBreakdown;
     if (data.isEmpty) {
@@ -399,7 +550,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
 
     final entries = data.entries.toList();
-    final total = entries.fold<double>(0, (s, e) => s + (e.value as num));
+    final total =
+        entries.fold<double>(0, (s, e) => s + (e.value as num));
 
     return Column(
       children: [
@@ -426,22 +578,27 @@ class _DashboardScreenState extends State<DashboardScreen>
         ),
         const SizedBox(height: 12),
         Wrap(
-          spacing: 12, runSpacing: 6,
+          spacing: 12,
+          runSpacing: 6,
           children: entries.asMap().entries.map((entry) {
             final i = entry.key;
             final e = entry.value;
             final pct = total > 0
                 ? ((e.value as num) / total * 100).toStringAsFixed(0)
                 : '0';
-            return _legendItem(e.key, AppColors.categoryColor(e.key, i),
-                '${formatTime((e.value as num).toInt())} ($pct%)');
+            return _legendItem(
+              e.key,
+              AppColors.categoryColor(e.key, i),
+              '${formatTime((e.value as num).toInt())} ($pct%)',
+            );
           }).toList(),
         ),
       ],
     );
   }
 
-  // ─── Pie Chart: Productive vs Unproductive ─────────────
+  // ─── Productivity Pie ─────────────────────────────────────────────────────
+
   Widget _buildProductivityPie(ProductivityProvider provider) {
     final prod = provider.productiveMinutes.toDouble();
     final neutral = provider.neutralMinutes.toDouble();
@@ -462,14 +619,20 @@ class _DashboardScreenState extends State<DashboardScreen>
               centerSpaceRadius: 40,
               sections: [
                 PieChartSectionData(
-                    value: prod, color: AppColors.productive,
-                    radius: 30, showTitle: false),
+                    value: prod,
+                    color: AppColors.productive,
+                    radius: 30,
+                    showTitle: false),
                 PieChartSectionData(
-                    value: neutral, color: AppColors.neutral,
-                    radius: 30, showTitle: false),
+                    value: neutral,
+                    color: AppColors.neutral,
+                    radius: 30,
+                    showTitle: false),
                 PieChartSectionData(
-                    value: wasted, color: AppColors.wasted,
-                    radius: 30, showTitle: false),
+                    value: wasted,
+                    color: AppColors.wasted,
+                    radius: 30,
+                    showTitle: false),
               ],
             ),
           ),
@@ -492,7 +655,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ─── Bar Chart: Tasks Completed vs Missed ──────────────
+  // ─── Bar Chart ────────────────────────────────────────────────────────────
+
   Widget _buildTasksBarChart(ProductivityProvider provider) {
     final trend = provider.weeklyTrend;
     if (trend.isEmpty) {
@@ -506,17 +670,16 @@ class _DashboardScreenState extends State<DashboardScreen>
           barTouchData: BarTouchData(
             touchTooltipData: BarTouchTooltipData(
               getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                final day = trend[group.x.toInt()];
                 final label = rodIndex == 0 ? 'Done' : 'Missed';
                 return BarTooltipItem(
                   '$label: ${rod.toY.toInt()}',
-                  AppTextStyles.caption.copyWith(
-                      color: Colors.white, fontSize: 11),
+                  AppTextStyles.caption
+                      .copyWith(color: Colors.white, fontSize: 11),
                 );
               },
             ),
           ),
-          gridData: FlGridData(show: false),
+          gridData: const FlGridData(show: false),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
             leftTitles: const AxisTitles(
@@ -530,11 +693,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                 showTitles: true,
                 getTitlesWidget: (value, meta) {
                   final i = value.toInt();
-                  if (i < 0 || i >= trend.length) {
-                    return const Text('');
-                  }
+                  if (i < 0 || i >= trend.length) return const Text('');
                   final date = trend[i]['date'] as String;
-                  final dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+                  const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
                   final dt = DateTime.tryParse(date);
                   return Text(
                     dt != null ? dayNames[dt.weekday % 7] : '',
@@ -549,18 +710,19 @@ class _DashboardScreenState extends State<DashboardScreen>
             final day = entry.value;
             return BarChartGroupData(x: i, barRods: [
               BarChartRodData(
-                toY: (day['tasksCompleted'] as num?)?.toDouble() ?? 0,
+                toY:
+                    (day['tasksCompleted'] as num?)?.toDouble() ?? 0,
                 color: AppColors.primaryGreen,
                 width: 10,
-                borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(4)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(4)),
               ),
               BarChartRodData(
                 toY: (day['tasksMissed'] as num?)?.toDouble() ?? 0,
                 color: AppColors.wasted,
                 width: 10,
-                borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(4)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(4)),
               ),
             ]);
           }).toList(),
@@ -569,7 +731,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ─── Line Chart: Productivity Trend ────────────────────
+  // ─── Line Chart ───────────────────────────────────────────────────────────
+
   Widget _buildProductivityLineChart(ProductivityProvider provider) {
     final trend = provider.weeklyTrend;
     if (trend.isEmpty) {
@@ -584,10 +747,8 @@ class _DashboardScreenState extends State<DashboardScreen>
             show: true,
             drawVerticalLine: false,
             horizontalInterval: 25,
-            getDrawingHorizontalLine: (value) => FlLine(
-              color: AppColors.border,
-              strokeWidth: 1,
-            ),
+            getDrawingHorizontalLine: (value) =>
+                FlLine(color: AppColors.border, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
@@ -613,7 +774,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   if (i < 0 || i >= trend.length) return const Text('');
                   final date = trend[i]['date'] as String;
                   final dt = DateTime.tryParse(date);
-                  final dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+                  const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
                   return Text(
                     dt != null ? dayNames[dt.weekday % 7] : '',
                     style: AppTextStyles.caption.copyWith(fontSize: 10),
@@ -622,7 +783,8 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ),
           ),
-          minY: 0, maxY: 100,
+          minY: 0,
+          maxY: 100,
           lineBarsData: [
             LineChartBarData(
               spots: trend.asMap().entries.map((e) {
@@ -655,7 +817,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ─── Area Chart: Cumulative Focus ──────────────────────
+  // ─── Area Chart ───────────────────────────────────────────────────────────
+
   Widget _buildCumulativeAreaChart(ProductivityProvider provider) {
     final data = provider.cumulativeFocus;
     if (data.isEmpty) {
@@ -663,15 +826,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
 
     final maxY = data.fold<double>(
-        0, (m, d) => (d['cumulativeMinutes'] as num).toDouble() > m
-            ? (d['cumulativeMinutes'] as num).toDouble()
-            : m);
+        0,
+        (m, d) =>
+            (d['cumulativeMinutes'] as num).toDouble() > m
+                ? (d['cumulativeMinutes'] as num).toDouble()
+                : m);
 
     return SizedBox(
       height: 180,
       child: LineChart(
         LineChartData(
-          gridData: FlGridData(show: false),
+          gridData: const FlGridData(show: false),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
             leftTitles: AxisTitles(
@@ -736,7 +901,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ─── Scatter Plot: Time vs Productivity ────────────────
+  // ─── Scatter Plot ─────────────────────────────────────────────────────────
+
   Widget _buildScatterPlot(ProductivityProvider provider) {
     final catBreakdown = provider.categoryBreakdown;
     final prodByCat = provider.productivityByCategory;
@@ -758,8 +924,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         prodRate = totalMin > 0 ? (prodMin / totalMin * 100) : 0;
       }
       spots.add(ScatterSpot(
-        totalMin,
-        prodRate,
+        totalMin, prodRate,
         dotPainter: FlDotCirclePainter(
           radius: 8,
           color: AppColors.categoryColor(cat, i).withValues(alpha: 0.8),
@@ -816,10 +981,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ─── AI Insights Card ─────────────────────────────────
+  // ─── AI Insights ──────────────────────────────────────────────────────────
+
   Widget _buildAIInsightsCard(ProductivityProvider provider) {
     final data = provider.aiInsightsData;
-    final insights = List<Map<String, dynamic>>.from(data['insights'] ?? []);
+    final insights =
+        List<Map<String, dynamic>>.from(data['insights'] ?? []);
     final summary = data['summary'] as String? ?? '';
 
     return CollapsibleCard(
@@ -836,8 +1003,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                 color: AppColors.primaryBlue.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Text(summary, style: AppTextStyles.body.copyWith(
-                fontSize: 13, height: 1.4)),
+              child: Text(summary,
+                  style: AppTextStyles.body.copyWith(
+                      fontSize: 13, height: 1.4)),
             ),
             const SizedBox(height: 12),
           ],
@@ -853,8 +1021,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                   Expanded(
                     child: Text(
                       insight['text'] ?? '',
-                      style: AppTextStyles.body.copyWith(
-                          fontSize: 13, height: 1.4),
+                      style: AppTextStyles.body
+                          .copyWith(fontSize: 13, height: 1.4),
                     ),
                   ),
                 ],
@@ -866,7 +1034,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ─── Helpers ───────────────────────────────────────────
+  // ─── Helpers ──────────────────────────────────────────────────────────────
 
   Widget _legendItem(String label, Color color, String value) {
     return Row(

@@ -1,84 +1,91 @@
 import Redis from 'ioredis';
 
-// Ensure the application doesn't crash if REDIS_URI is missing (use local mock or just log)
 const redisUri = process.env.REDIS_URI || '';
-export const redisClient = redisUri ? new Redis(redisUri) : null;
+export const redisClient = redisUri ? new Redis(redisUri, {
+  enableReadyCheck: false,
+  maxRetriesPerRequest: 1,
+  connectTimeout: 3000,
+  lazyConnect: true,
+}) : null;
 
 if (!redisClient) {
-  console.warn('⚠️ REDIS_URI not set. Caching is disabled. Provide a Redis URL for production performance.');
+  console.warn('⚠️ REDIS_URI not set. Caching is disabled.');
 } else {
-  redisClient.on('error', (err) => console.error('Redis Error:', err));
-  redisClient.on('connect', () => console.log('✅ Redis connected successfully.'));
+  redisClient.on('error', (err) => console.error('Redis Error:', err.message));
+  redisClient.on('connect', () => console.log('✅ Redis connected.'));
+  redisClient.connect().catch(() => {});
 }
 
-/**
- * Get cache by exact key
- */
+// ─── Core Primitives ────────────────────────────────────────────────────────
+
 export const getCache = async (key: string): Promise<any | null> => {
   if (!redisClient) return null;
   try {
     const data = await redisClient.get(key);
     return data ? JSON.parse(data) : null;
-  } catch (error) {
-    console.error('Redis Get Error:', error);
+  } catch {
     return null;
   }
 };
 
-/**
- * Set cache with TTL (Default 1 hour)
- */
 export const setCache = async (key: string, data: any, ttlSeconds: number = 3600): Promise<void> => {
   if (!redisClient) return;
   try {
     await redisClient.set(key, JSON.stringify(data), 'EX', ttlSeconds);
-  } catch (error) {
-    console.error('Redis Set Error:', error);
+  } catch {
+    // non-fatal
   }
 };
 
-/**
- * Delete specific keys directly
- */
 export const deleteCacheKeys = async (keys: string[]): Promise<void> => {
   if (!redisClient || keys.length === 0) return;
   try {
     await redisClient.del(...keys);
-  } catch (error) {
-    console.error('Redis Delete Error:', error);
+  } catch {
+    // non-fatal
   }
+};
+
+// ─── Surgical Invalidation ──────────────────────────────────────────────────
+
+/**
+ * Invalidate ONLY analytics and weekly-trend cache for a user on a specific date.
+ * Does NOT nuke slot cache (slots are write-through: updated immediately on mutation).
+ */
+export const invalidateAnalyticsForDate = async (userId: string, dateKey: string): Promise<void> => {
+  const keys = [
+    `user:${userId}:analytics:day:${dateKey}`,
+    `user:${userId}:analytics:week:${dateKey}`,
+    `user:${userId}:weekly-trend:${dateKey}`,
+    `user:${userId}:ai-insights`,
+    // Invalidate the weekly trend key for the 7 days around this date too
+    ...Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(dateKey);
+      d.setDate(d.getDate() + i);
+      return `user:${userId}:weekly-trend:${d.toISOString().split('T')[0]}`;
+    }),
+  ];
+  // Deduplicate
+  await deleteCacheKeys([...new Set(keys)]);
 };
 
 /**
- * Clear ALL specific user analytics/reports/heatmaps based on pattern matching.
- * ioredis requires using SCAN to find patterned keys and then DEL
+ * Write-through: update the slot cache for a date immediately after a mutation.
+ * This means the next GET /slots request gets the fresh value from Redis, not MongoDB.
  */
-export const invalidateUserAnalytics = async (userId: string): Promise<void> => {
-  if (!redisClient) return;
-  try {
-    // We want to delete: user:{userId}:analytics:*, user:{userId}:weekly-trend:*, 
-    // user:{userId}:heatmap:*, user:{userId}:reports:*, user:{userId}:ai-insights
-    
-    // Pattern to match all analytics/report driven keys for this user
-    const pattern = `user:${userId}:*`;
-    
-    let cursor = '0';
-    let keysToDelete: string[] = [];
-
-    do {
-      const [newCursor, keys] = await redisClient.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
-      cursor = newCursor;
-      
-      // Filter keys to only delete computed/analytics data, but keep base things intact if needed
-      // Actually, invalidating everything (tasks, slots, analytics) ensures strict consistency.
-      keysToDelete.push(...keys);
-    } while (cursor !== '0');
-
-    if (keysToDelete.length > 0) {
-      await redisClient.del(...keysToDelete);
-      console.log(`🧹 Cleared ${keysToDelete.length} cache keys for user ${userId}`);
-    }
-  } catch (error) {
-    console.error('Redis Invalidation Error:', error);
-  }
+export const writeThroughSlotsCache = async (userId: string, dateKey: string, slots: any[]): Promise<void> => {
+  const cacheKey = `user:${userId}:slots:${dateKey}`;
+  // Use a short TTL for hot data (5 minutes)
+  await setCache(cacheKey, slots, 300);
 };
+
+/**
+ * Get cached slots (for write-through reads).
+ */
+export const getCachedSlots = async (userId: string, dateKey: string): Promise<any[] | null> => {
+  const cacheKey = `user:${userId}:slots:${dateKey}`;
+  return getCache(cacheKey);
+};
+
+// ─── Legacy full-scan invalidation (kept for compatibility) ─────────────────
+export const invalidateUserAnalytics = invalidateAnalyticsForDate.bind(null);

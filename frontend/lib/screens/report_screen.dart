@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:intl/intl.dart';
 import '../core/app_theme.dart';
 import '../core/time_utils.dart';
 import '../services/api_service.dart';
@@ -854,7 +853,6 @@ class _ReportScreenState extends State<ReportScreen> {
   // ─── Category Donut ────────────────────────────────────
   Widget _buildCategoryDonut(Map<String, dynamic> data) {
     final entries = data.entries.toList();
-    final total = entries.fold<double>(0, (s, e) => s + (e.value as num));
 
     return Column(
       children: [
@@ -883,9 +881,6 @@ class _ReportScreenState extends State<ReportScreen> {
           children: entries.asMap().entries.map((entry) {
             final i = entry.key;
             final e = entry.value;
-            final pct = total > 0
-                ? ((e.value as num) / total * 100).toStringAsFixed(0)
-                : '0';
             return _legendDot(
               '${e.key} (${formatTime((e.value as num).toInt())})',
               AppColors.categoryColor(e.key, i),

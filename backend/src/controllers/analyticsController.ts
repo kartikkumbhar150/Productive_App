@@ -161,7 +161,9 @@ export const getAnalytics = async (req: Request, res: Response) => {
       insights,
     };
 
-    await setCache(cacheKey, responseData, 3600); // Cache for 1 hour
+    // Day-level analytics change frequently; use 2-minute TTL for day, 1hr for week
+    const cacheTTL = period === 'day' ? 120 : 3600;
+    await setCache(cacheKey, responseData, cacheTTL);
     res.json(responseData);
   } catch (error: any) {
     res.status(400).json({ message: error.message });
